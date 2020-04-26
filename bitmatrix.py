@@ -4,12 +4,18 @@ import sys
 import random
 
 class BitMatrix():
-	def __init__(self, nrows, ncols):
+	def __init__(self, nrows, ncols, rows=[]):
 		self.nrows = nrows
 		self.ncols = ncols
-		self.rows = [0] * nrows
 
-	def set_identity(self):
+		self.rows = [0] * nrows
+		for i in range(len(rows)):
+			self.rows[i] = rows[i]
+
+	def set_identity(self, relaxed=False):
+		if not relaxed and self.nrows != self.ncols:
+			raise Exception('cannot compute identity of non-square matrix')
+
 		for i in range(self.nrows):
 			self.rows[i] = 1<<(self.ncols-1-i)
 
@@ -48,41 +54,79 @@ class BitMatrix():
 			if not (value & (1<<(self.nrows-1-i))):
 				self.rows[i] ^= probe
 
-	def inverse(self):
-		inv = BitMatrix(self.nrows, self.ncols)
-		inv.set_identity()
+	def row_echelon(self):
+		''' calculate row echelon form while recording a history of operations
+			row echelon is identity -> history is inverse '''
+		nrows = self.nrows
+		echelon = self.clone()
+		history = BitMatrix(nrows, self.ncols)
+		history.set_identity(relaxed=True)
 
-		rows = list(self.rows)
-
-		for cur in range(self.nrows):
+		# row reduce
+		for cur in range(nrows):
 			mask = 1<<(self.ncols-1-cur)
 
 			# find first row with target bit set
-			for i in range(cur, self.nrows):
-				if rows[i] & mask:
+			for i in range(cur, nrows):
+				if echelon.rows[i] & mask:
 					break
-			if i >= self.nrows:
-				raise Exception('can\'t invert')
+			if i >= nrows:
+				continue
 
 			# if it's not the current row, swap it to current
 			if i != cur:
-				tmp = rows[cur]
-				rows[cur] = rows[i]
-				rows[i] = tmp
+				tmp = echelon.rows[cur]
+				echelon.rows[cur] = echelon.rows[i]
+				echelon.rows[i] = tmp
 
-				tmp = inv.rows[cur]
-				inv.rows[cur] = inv.rows[i]
-				inv.rows[i] = tmp
+				tmp = history.rows[cur]
+				history.rows[cur] = history.rows[i]
+				history.rows[i] = tmp
 
 			# add to every other row
-			for i in range(0, self.nrows):
+			for i in range(0, nrows):
 				if i==cur: continue
-				if rows[i] & mask:
-					rows[i] ^= rows[cur]
-					inv.rows[i] ^= inv.rows[cur]
+				if echelon.rows[i] & mask:
+					echelon.rows[i] ^= echelon.rows[cur]
+					history.rows[i] ^= history.rows[cur]
 
-		# done!
-		return inv
+		return (echelon, history)
+
+	def rank(self, relaxed=False):
+		if relaxed:
+			echelon = self.clone()
+		else:
+			(echelon, history) = self.row_echelon()
+
+		rank = 0
+		bitpos = self.ncols-1
+		for rowi in range(echelon.nrows):
+			# find leftmost set bit
+			while bitpos >= 0:
+				mask = 1<<bitpos
+				if echelon.rows[rowi] & mask: break
+				bitpos -= 1
+
+			# print('rows[%d]=%s hit bit %d' % (rowi, bin(echelon.rows[rowi])[2:], bitpos))
+			if bitpos < 0: break
+
+			# if following row also has set bit, we're done
+			if rowi < echelon.nrows-1:
+				if echelon.rows[rowi+1] & mask:
+					break
+
+			rank += 1
+			bitpos -= 1
+			if bitpos < 0: break
+
+		return rank
+
+	def inverse(self):
+		(echelon, history) = self.clone().row_echelon()
+		rank = echelon.rank(relaxed=True)
+		if rank != echelon.nrows:
+			raise Exception('inversion impossible, matrix rank %d != nrows %d' % (rank, echelon.nrows))
+		return history
 
 	def transpose(self):
 		tra = BitMatrix(self.ncols, self.nrows)
@@ -108,8 +152,7 @@ class BitMatrix():
 		return result
 
 	def clone(self):
-		tmp = BitMatrix(self.ncols, self.nrows)
-		tmp.rows = list(self.rows)
+		tmp = BitMatrix(self.nrows, self.ncols, list(self.rows))
 		return tmp
 
 	def __eq__(self, rhs):
@@ -124,6 +167,16 @@ class BitMatrix():
 		return '\n'.join(tmp)
 
 if __name__ == '__main__':
+
+	bm = BitMatrix(3,4, [0xB, 0xC, 0xF])
+	(echelon, history) = bm.row_echelon()
+	assert echelon == BitMatrix(3,4, [8, 4, 3])
+	assert echelon.rank(relaxed=True) == 3
+
+	bm = BitMatrix(3,4, [0xB, 0xC, 0x7])
+	(echelon, history) = bm.row_echelon()
+	assert echelon == BitMatrix(3,4, [11, 7, 0])
+	assert echelon.rank(relaxed=True) == 2
 
 	for i in range(1000):
 		dims = random.randint(1,64)

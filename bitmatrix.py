@@ -36,6 +36,18 @@ class BitMatrix():
 				result |= 1
 		return result
 
+	def set_column(self, col, value):
+		if col >= self.ncols:
+			raise Exception('requested column %d is out of range' % col)
+
+		probe = 1<<(self.ncols-1-col)
+		for i in range(self.nrows):
+			# assume it's a set
+			self.rows[i] |= probe
+			# if wrong, clear it
+			if not (value & (1<<(self.nrows-1-i))):
+				self.rows[i] ^= probe
+
 	def invert(self):
 		inv = BitMatrix(self.nrows, self.ncols)
 		inv.set_identity()
@@ -72,17 +84,24 @@ class BitMatrix():
 		# done!
 		return inv
 
+	def transpose(self):
+		tra = BitMatrix(self.ncols, self.nrows)
+		for i in range(self.nrows):
+			tra.set_column(i, self.rows[i])
+		return tra
+
 	def __mul__(self, rhs):
 		if self.ncols != rhs.nrows:
 			raise Exception('requested matrices cannot be multiplied')
 
 		new_nrows = self.nrows
 		new_ncols = rhs.ncols
-		result = BitMatrix(new_ncols, new_nrows)
+		print('new_nrows:%d new_ncols:%d' % (new_nrows, new_ncols))
+		result = BitMatrix(new_nrows, new_ncols)
 
 		for x in range(new_ncols):
 			for y in range(new_nrows):
-				tmp = self.rows[x] & rhs.get_column(y)
+				tmp = self.rows[y] & rhs.get_column(x)
 				tmp = sum(map(int, bin(tmp)[2:])) % 2
 				if tmp:
 					result.rows[y] |= (1<<(new_ncols-1-x))
@@ -106,38 +125,28 @@ class BitMatrix():
 		return '\n'.join(tmp)
 
 if __name__ == '__main__':
-	a = BitMatrix(16, 16)
+	basis = BitMatrix(4, 4)
+	basis.rows = [0xA, 0x3, 0xD, 0xF]
+	print('basis:')
+	print(basis)
 
-	print('random:')
-	a.set_random()
-	print(a)
+	trans = basis.transpose()
+	print('\ntranspose:')
+	print(trans)
 
-	print('\nidentity:')
-	a.set_identity()
-	print(a)
-
-	print('\nrandom basis:')
-	a.set_random_basis()
-	print(a)
-
+	inverse = trans.invert()
 	print('\ninverse:')
-	b = a.invert()
+	print(inverse)
 
-	print('\ncol[0]:', bin(b.get_column(0)))
-	print('col[1]:', bin(b.get_column(1)))
-	#print('col[7]:', bin(b.get_column(7)))
-	#print('col[8]:', bin(b.get_column(8)))
+	check = inverse * trans
+	print('\ncheck:')
+	print(check)
 
-	#b = BitMatrix(2,2)
-	#b.rows = [3,1]
+	target = BitMatrix(4, 1)
+	target.set_column(0, 0xC)
+	print('\ntarget:')
+	print(target)
 
-	print('\na:')
-	print(a)
-
-	print('\nb:')
-	print(b)
-
-	prod = a * b
-	print('\nprod:')
-	print(prod)
-
+	product = inverse * target
+	print('\nproduct:')
+	print(product)

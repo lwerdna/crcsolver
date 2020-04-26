@@ -48,7 +48,7 @@ class BitMatrix():
 			if not (value & (1<<(self.nrows-1-i))):
 				self.rows[i] ^= probe
 
-	def invert(self):
+	def inverse(self):
 		inv = BitMatrix(self.nrows, self.ncols)
 		inv.set_identity()
 
@@ -96,7 +96,6 @@ class BitMatrix():
 
 		new_nrows = self.nrows
 		new_ncols = rhs.ncols
-		print('new_nrows:%d new_ncols:%d' % (new_nrows, new_ncols))
 		result = BitMatrix(new_nrows, new_ncols)
 
 		for x in range(new_ncols):
@@ -125,28 +124,21 @@ class BitMatrix():
 		return '\n'.join(tmp)
 
 if __name__ == '__main__':
-	basis = BitMatrix(4, 4)
-	basis.rows = [0xA, 0x3, 0xD, 0xF]
-	print('basis:')
-	print(basis)
 
-	trans = basis.transpose()
-	print('\ntranspose:')
-	print(trans)
+	for i in range(1000):
+		dims = random.randint(1,64)
 
-	inverse = trans.invert()
-	print('\ninverse:')
-	print(inverse)
+		identity = BitMatrix(dims, dims)
+		identity.set_identity()
 
-	check = inverse * trans
-	print('\ncheck:')
-	print(check)
+		basis = BitMatrix(dims, dims)
+		basis.set_random_basis()
+		print('\nbasis:')
+		print(basis)
 
-	target = BitMatrix(4, 1)
-	target.set_column(0, 0xC)
-	print('\ntarget:')
-	print(target)
+		inverse = basis.inverse()
+		print('\ninverse:')
+		print(inverse)
 
-	product = inverse * target
-	print('\nproduct:')
-	print(product)
+		assert inverse*basis == identity
+

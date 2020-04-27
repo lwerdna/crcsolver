@@ -35,8 +35,14 @@ class BitMatrix():
 	def set_random(self):
 		self.rows = [random.getrandbits(self.ncols) for x in range(self.nrows)]
 
-	def set_random_basis(self):
-		self.set_identity()
+	def set_random_independent_rows(self):
+		''' this is a basis if nrows==ncols '''
+		self.check_consistency()
+
+		if self.nrows > self.ncols:
+			raise MatrixException('%d %d-bit rows cannot all be independent' % (self.nrows, self.ncols))
+
+		self.set_identity(relaxed=True)
 		for i in range(4*self.nrows):
 			a = random.randint(0, self.nrows-1)
 			b = random.randint(0, self.nrows-1)
@@ -274,7 +280,7 @@ if __name__ == '__main__':
 		identity.set_identity()
 
 		A = BitMatrix(dims, dims)
-		A.set_random_basis()
+		A.set_random_independent_rows()
 		assert A.inverse() * A == identity
 
 	# solve Ax = B by x = A^-1 * B
@@ -282,7 +288,7 @@ if __name__ == '__main__':
 #		dims = random.randint(1,64)
 #
 #		A = BitMatrix(dims, dims)
-#		A.set_random_basis()
+#		A.set_random_independent_rows()
 #
 #		B = BitMatrix(dims, 1)
 #		B.set_random()

@@ -7,104 +7,241 @@ from bitmatrix import BitMatrix
 from itertools import compress
 from functools import reduce
 
-def solve(width, inputs, target):
-	# 11000
-	# 01010
-	# 11111
-	# 10111
-	A = BitMatrix(len(inputs), width)
-	for i in range(len(inputs)):
-		A.rows[i] = inputs[i]
+def bitstr(val, width):
+	return bin(val)[2:].rjust(width, '0')
 
-	#
-	(echelon, history) = A.row_echelon()
+def independent_subset(inputs):
+	''' given a list of integers, return a list of those that are linearly independent '''
 
-	#
-	bit2row = {}
-	for bit in range(width-1,-1,-1):
-		# which rows have this bit set?
-		matches = list(filter(lambda i: echelon.rows[i] & (1<<bit), range(len(echelon.rows))))
-		if len(matches) == 0: continue
-		if len(matches) > 2: break # NOT a pivot if multiple rows have this bit!
-		bit2row[bit] = matches[0]
-		if len(bit2row) >= len(echelon.rows): break
+	width = max(x.bit_length() for x in inputs)
+	basis = BitMatrix(0, width)
 
-	rowflags = 0
-	for (bit,row) in bit2row.items():
-		if target & (1<<bit):
-			rowflags ^= history.rows[row]
+	result = []
+	for inp in inputs:
+		ranka = basis.rank()
+		basis.row_append(inp)
+		basis = basis.row_echelon()
+		rankb = basis.rank()
 
-	print('rowflags:', bin(rowflags)[2:])
-	tmp = bin(rowflags)[2:]
-	tmp = '0'*(width-len(tmp))+tmp
+		if rankb > ranka:
+			result.append(1)
+		else:
+			result.append(0)
+			basis.row_pop()
+
+		# at most n independent vectors of width n
+		if basis.nrows >= width:
+			result = result + [0]*(len(inputs)-len(result))
+			break
+
+	return result
+
+def solve(inputs, target):
+	width = max([x.bit_length() for x in inputs])
+	if target.bit_length() > width:
+		return []
+	print('target: %s' % bitstr(target, width))
+	print('width: %d' % width)
+
+	selector = independent_subset(inputs)
+	chosen = list(compress(inputs, selector))
+	chosen_idxs = [x for x in range(len(selector)) if selector[x]]
+	print('chosen:', chosen)
+	print('chosen_idxs:', chosen_idxs)
+
+	A = BitMatrix(sum(selector), width, chosen)
+	print('A:')
+	print(A)
+	record = BitMatrix(sum(selector), width)
+	record.set_identity(relaxed=True)
+	print('record:')
+	print(record)
+
+	echelon = A.row_echelon(record)
+	print('echelon:')
+	print(echelon)
+
+	# calculate row2mask, eg:
+	# [0]: 0x8000 "use row 0 to toggle bit 15"
+	# [1]: 0x4000 "use row 1 to toggle bit 14"
+	# [2]: 0x0010 "use row 2 to toggle bit 4"
+	row2mask = [1<<(echelon.rows[x].bit_length()-1) for x in range(echelon.rank())]
+	print('\nrow2mask:', row2mask)
+
+	# rows_used_bitfield, eg:
+	# 00
+	rows_used_bitfield = 0
+	print('\nrow2mask:', row2mask)
+	for (row, mask) in enumerate(row2mask):
+		print('[%d]: %s' % (row, bitstr(mask,width)))
+		if target & mask:
+			print('since %s & %s, xoring in %s' % (bitstr(target,width), bitstr(mask,width), bitstr(record.rows[row],width)))
+			rows_used_bitfield ^= record.rows[row]
+
+	# 0101
+	# |||+- row 0 used
+	# ||+-- row 1 NOT used
+	# |+--- row 2 used
+	# +---- row 3 NOT used
+	tmp = bitstr(rows_used_bitfield, record.nrows)
+	print('rows_used_bitfield:', tmp)
 	selector = [int(x) for x in tmp]
+
+	# [0,1,0,1]
+	#print('selector: ', selector)
+	# |||+- row 0 used
+	# ||+-- row 1 NOT used
+	# |+--- row 2 used
+	# +---- row 3 NOT used
+
+	# this selector is for the chosen, map these back to the inputs
+	tmp = [0]*len(inputs)
+	for (i, s) in enumerate(selector):
+		if not s: continue
+		tmp[chosen_idxs[i]] = 1
+	selector = tmp
 
 	# set result to [] if no solution
 	if target != reduce(lambda a,b:a^b, compress(inputs, selector), 0):
+		print('no solution')
 		return []
 
-	selector = selector[0:len(inputs)]
 	print('returning:', selector)
 	return selector
 
 if __name__ == '__main__':
-	# solve stupid cases
-	inputs = [1,0,1,0]
-	assert solve(1, inputs, 1) == [1,0]
-	sys.exit(-1)
+	# independent subset, they're all independent
+	inputs = [0xB, 0xC, 0xF]
+	assert independent_subset(inputs) == [1,1,1]
+
+	# independent subset, they're one dependent
+	inputs = [0xB, 0xC, 0x7]
+	assert independent_subset(inputs) == [1,1,0]
+
+	# independent subset, two dependent, including a zero
+	inputs = [9, 11, 0, 2]
+	assert independent_subset(inputs) == [1,1,0,0]
+
+	# independent subset, two dependent, including a zero
+	inputs = [4, 5, 0, 1]
+	assert independent_subset(inputs) == [1,1,0,0]
+
+	# independent subset, many zeros
+	inputs = [0,0,0,0,1,0,1,0]
+	print(independent_subset(inputs))
+	assert independent_subset(inputs) == [0,0,0,0,1,0,0,0]
+
+	# independent subset
+	for testi in range(50):
+		# get 8 random 32-bit independent rows
+		tmp = BitMatrix(8, 32)
+		tmp.set_random_independent_rows()
+		inputs = tmp.rows[0:8]
+		a = set(inputs)
+
+		# generate 100 DEPENDENT rows
+		for k in range(100):
+			inputs.append(random.choice(inputs) ^ random.choice(inputs))
+
+		selector = independent_subset(inputs)
+		b = set(compress(inputs, selector))
+
+		assert a == b
+
+	# solve an 11-bit known system
+	inputs = []
+	inputs.append(0b11100111011)
+	inputs.append(0b01010000110)
+	inputs.append(0b11001011100)
+	inputs.append(0b01111101011)
+	inputs.append(0b01010110011)
+	inputs.append(0b01000101000)
+	inputs.append(0b10001001011)
+	#inputs.append(0b00011001010)
+	#inputs.append(0b11000100111)
+	#inputs.append(0b11000100001)
+	#inputs.append(0b10011010011)
+	#inputs.append(0b11010111010)
+	#inputs.append(0b10111000101)
+	target =      0b10011011010
+	print(bin(reduce(lambda a,b:a^b, inputs[0:7])))
+	assert solve(inputs, target) == [1,1,1,1,1,1,1,0,0,0,0,0,0]
 
 	# solve a 4-bit known system (worked on paper)
 	inputs = [0xA, 0x3, 0xD, 0xF]
-	assert solve(4, inputs, 0xA) == [1,0,0,0]
-	assert solve(4, inputs, 0x3) == [0,1,0,0]
-	assert solve(4, inputs, 0xD) == [0,0,1,0]
-	assert solve(4, inputs, 0xF) == [0,0,0,1]
+	assert solve(inputs, 0xA) == [1,0,0,0]
+	assert solve(inputs, 0x3) == [0,1,0,0]
+	assert solve(inputs, 0xD) == [0,0,1,0]
+	assert solve(inputs, 0xF) == [0,0,0,1]
+
+	# solve stupid cases
+	inputs = [1,0,1,0]
+	print(solve(inputs,1))
+	assert solve(inputs, 1) == [1,0,0,0]
+
+	# more zeros
+	inputs = [0,0,0,0,1,0,1,0]
+	assert solve(inputs, 1) == [0,0,0,0,1,0,0,0]
+
+	# solve a 4-bit known system (worked on paper)
+	inputs = [0xA, 0x3, 0xD, 0xF]
+	assert solve(inputs, 0xA) == [1,0,0,0]
+	assert solve(inputs, 0x3) == [0,1,0,0]
+	assert solve(inputs, 0xD) == [0,0,1,0]
+	assert solve(inputs, 0xF) == [0,0,0,1]
 
 	for target in range(16):
-		selector = solve(4, inputs, target)
+		selector = solve(inputs, target)
 		check = reduce(lambda a,b:a^b, compress(inputs, selector), 0)
 		assert check == target
 
 	# solve a known system (worked on paper)
 	inputs = [0x18, 0xA, 0x1F, 0x17]
-	assert solve(5, inputs, 0) == [0,0,0,0]
-	assert solve(5, inputs, 5) == [1,1,0,1]
+	assert solve(inputs, 0) == [0,0,0,0]
+	assert solve(inputs, 5) == [1,1,0,1]
 
 	# solve problems with full inverses
 	for testi in range(20):
-		width = random.randint(1,20)
+		width = random.randint(1,32)
 
 		# generate inputs known to solve
 		tmp = BitMatrix(width,width)
-		tmp.set_random_basis()
+		tmp.set_random_independent_rows()
 		inputs = tmp.rows
 
 		for i in range(100):
 			target = random.getrandbits(width)
-			selector = solve(width, inputs, target)
+			selector = solve(inputs, target)
 			assert target == reduce(lambda a,b:a^b, compress(inputs, selector), 0)
 
-	for testi in range(20):
-		width = random.randint(1,2)
-
-		# solve problems with partial inverses
+	# solve problems without full inverses
+	for testi in range(100):
+		width = random.randint(1,20)
 		target = random.getrandbits(width)
 		inputs = [target]
 		# add the inputs that can produce the target
 		for i in range(6):
+			plain = inputs.pop()
 			key = random.getrandbits(width)
-			inputs.append(inputs.pop() ^ key)
+			inputs.append(plain ^ key)
 			inputs.append(key)
-		# add some random inputs
+			print('heehaw: ')
+			print(bitstr(inputs[0], width))
+			print(bitstr(inputs[1], width))
+		# add some random inputs (that may not necessarily help in producing the target)
 		for i in range(6):
 			inputs.append(random.getrandbits(width))
-		# shuffle the inputs
-		random.shuffle(inputs)
+		# mix it all up
+		#random.shuffle(inputs)
 
-		print('inputs:')
-		print(BitMatrix(len(inputs), width, inputs))
-		print('target:\n', bin(target)[2:])
+		selector = solve(inputs, target)
 
-		selector = solve(width, inputs, target)
+		if selector == []:
+			print('%s (target)' % bitstr(target, width))
+			print('inputs:')
+			print('\n'.join(map(lambda x: bitstr(x, width), inputs)))
+			check = reduce(lambda a,b:a^b, inputs[0:7], 0)
+			print('%s (xor of first 6)' % bitstr(check, width))
 		assert target == reduce(lambda a,b:a^b, compress(inputs, selector), 0)
 
+	print('PASS')

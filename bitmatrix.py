@@ -12,11 +12,21 @@ class BitMatrix():
 		for i in range(len(rows)):
 			self.rows[i] = rows[i]
 
+		self.check_consistency()
+
+	def check_consistency(self):
+		if len(self.rows) > self.nrows:
+			raise Exception('%d rows specified, but %d rows found' % (self.nrows, len(self.rows)))
+
+		for row in self.rows:
+			if len(bin(row)[2:]) > self.ncols:
+				raise Exception('%d columns specified, but 0x%X is wider' % (self.ncols, len(bin(row)[2:])))
+
 	def set_identity(self, relaxed=False):
 		if not relaxed and self.nrows != self.ncols:
 			raise Exception('cannot compute identity of non-square matrix')
 
-		for i in range(self.nrows):
+		for i in range(min(self.nrows, self.ncols)):
 			self.rows[i] = 1<<(self.ncols-1-i)
 
 	def set_random(self):
@@ -57,13 +67,16 @@ class BitMatrix():
 	def row_echelon(self):
 		''' calculate row echelon form while recording a history of operations
 			row echelon is identity -> history is inverse '''
-		nrows = self.nrows
+
+		self.check_consistency()
+
+		(nrows, ncols) = (self.nrows, self.ncols)
 		echelon = self.clone()
 		history = BitMatrix(nrows, self.ncols)
 		history.set_identity(relaxed=True)
 
 		# row reduce
-		for cur in range(nrows):
+		for cur in range(min(nrows, ncols)):
 			mask = 1<<(self.ncols-1-cur)
 
 			# find first row with target bit set
@@ -93,6 +106,7 @@ class BitMatrix():
 		return (echelon, history)
 
 	def rank(self, relaxed=False):
+		''' dimension of the vector space spanned by rows '''
 		if relaxed:
 			echelon = self.clone()
 		else:

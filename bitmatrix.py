@@ -3,6 +3,9 @@
 import sys
 import random
 
+class MatrixException(Exception):
+	pass
+
 class BitMatrix():
 	def __init__(self, nrows, ncols, rows=[]):
 		self.nrows = nrows
@@ -16,15 +19,15 @@ class BitMatrix():
 
 	def check_consistency(self):
 		if len(self.rows) > self.nrows:
-			raise Exception('%d rows specified, but %d rows found' % (self.nrows, len(self.rows)))
+			raise MatrixException('%d rows specified, but %d rows found' % (self.nrows, len(self.rows)))
 
 		for row in self.rows:
-			if len(bin(row)[2:]) > self.ncols:
-				raise Exception('%d columns specified, but 0x%X is wider' % (self.ncols, len(bin(row)[2:])))
+			if row.bit_length() > self.ncols:
+				raise MatrixException('%d columns specified, but 0x%X is wider' % (self.ncols, row))
 
 	def set_identity(self, relaxed=False):
 		if not relaxed and self.nrows != self.ncols:
-			raise Exception('cannot compute identity of non-square matrix')
+			raise MatrixException('cannot compute identity of non-square matrix')
 
 		for i in range(min(self.nrows, self.ncols)):
 			self.rows[i] = 1<<(self.ncols-1-i)
@@ -43,7 +46,7 @@ class BitMatrix():
 	def get_column(self, col):
 		''' 0-indexed: 0 is leftmost column, self.ncols-1 is rightmost column '''
 		if col >= self.ncols:
-			raise Exception('requested column %d is out of range' % col)
+			raise MatrixException('requested column %d is out of range' % col)
 		mask = 1<<(self.ncols-1-col)
 		result = 0
 		for row in self.rows:
@@ -54,7 +57,7 @@ class BitMatrix():
 
 	def set_column(self, col, value):
 		if col >= self.ncols:
-			raise Exception('requested column %d is out of range' % col)
+			raise MatrixException('requested column %d is out of range' % col)
 
 		probe = 1<<(self.ncols-1-col)
 		for i in range(self.nrows):
@@ -64,44 +67,63 @@ class BitMatrix():
 			if not (value & (1<<(self.nrows-1-i))):
 				self.rows[i] ^= probe
 
+	def row_append(self, row):
+		self.check_consistency()
+
+		if row >= (1<<self.ncols):
+			raise MatrixException('cannot append 0x%X as its width exceeds columns %d' % (row, self.ncols))
+
+		self.nrows += 1
+		self.rows.append(row)
+
+	def row_pop(self):
+		self.check_consistency()
+
+		if self.nrows <= 0:
+			raise MatrixException('attempting to pop a row from empty row matrix')
+
+		self.nrows -= 1
+		return self.rows.pop()
+
 	def row_echelon(self, record=None):
 		''' calculate row echelon form
 			row echelon is identity -> record is inverse '''
 
 		self.check_consistency()
-
 		(nrows, ncols) = (self.nrows, self.ncols)
+
+		# use a dummy record if no reference provided
+		if not record:
+			record = BitMatrix(nrows, 1)
+
+		record.check_consistency()
+		if self.nrows != record.nrows:
+			raise MatrixException('record matrix has %d rows, mismatch our %d rows' % (record.nrows, self.nrows))
+
+		pos = 0
 		echelon = self.clone()
-
-		# row reduce
-		for cur in range(min(nrows, ncols)):
-			mask = 1<<(self.ncols-1-cur)
-
-			# find first row with target bit set
-			for i in range(cur, nrows):
+		for mask in [1<<x for x in range(ncols-1,-1,-1)]:
+			# find first index with bit set
+			miss = True
+			for i in range(pos, nrows):
 				if echelon.rows[i] & mask:
-					break
-			if i >= nrows:
-				continue
+					miss = False; break
+			if miss: continue
 
-			# if it's not the current row, swap it to current
-			if i != cur:
-				tmp = echelon.rows[cur]
-				echelon.rows[cur] = echelon.rows[i]
-				echelon.rows[i] = tmp
+			# swap into position
+			if i != pos:
+				(echelon.rows[i], echelon.rows[pos]) = (echelon.rows[pos], echelon.rows[i])
+				(record.rows[i], record.rows[pos]) = (record.rows[pos], record.rows[i])
 
-				if record:
-					tmp = record.rows[cur]
-					record.rows[cur] = record.rows[i]
-					record.rows[i] = tmp
-
-			# add to every other row
-			for i in range(0, nrows):
-				if i==cur: continue
+			# add it to all applicable rows
+			for i in (x for x in range(nrows) if x!=pos):
 				if echelon.rows[i] & mask:
-					echelon.rows[i] ^= echelon.rows[cur]
-					if record:
-						record.rows[i] ^= record.rows[cur]
+					echelon.rows[i] ^= echelon.rows[pos]
+					record.rows[i] ^= record.rows[pos]
+
+			pos += 1
+			if pos >= nrows:
+				break
 
 		return echelon
 
@@ -114,7 +136,7 @@ class BitMatrix():
 		self.check_consistency()
 
 		if self.nrows != self.ncols:
-			raise Exception('inversion impossible since rows != columns, %d != %d' % (self.nrows, self.ncols))
+			raise MatrixException('inversion impossible since rows != columns, %d != %d' % (self.nrows, self.ncols))
 
 		record = BitMatrix(self.nrows, self.ncols)
 		record.set_identity()
@@ -122,7 +144,7 @@ class BitMatrix():
 		echelon = self.row_echelon(record)
 		rank = echelon.rank()
 		if rank != echelon.nrows:
-			raise Exception('inversion impossible, matrix rank %d != nrows %d' % (rank, echelon.nrows))
+			raise MatrixException('inversion impossible, rank %d != nrows %d' % (rank, echelon.nrows))
 
 		return record
 
@@ -134,7 +156,7 @@ class BitMatrix():
 
 	def __mul__(self, rhs):
 		if self.ncols != rhs.nrows:
-			raise Exception('requested matrices cannot be multiplied')
+			raise MatrixException('requested factors cannot be multiplied')
 
 		new_nrows = self.nrows
 		new_ncols = rhs.ncols
@@ -165,7 +187,7 @@ class BitMatrix():
 		return '\n'.join(tmp)
 
 if __name__ == '__main__':
-	# test inverse
+	# test identity
 	# 1000
 	# 0100
 	# 0010
@@ -174,18 +196,36 @@ if __name__ == '__main__':
 	bm.set_identity()
 	assert bm.rows == [8, 4, 2, 1]
 
-	# test inverse, relaxed
+	# test identity, relaxed
 	# 10000000
 	# 01000000
 	# 00100000
 	bm = BitMatrix(3, 8) # 1st try
 	try:
-		bm.set_identity(relaxed=True)
+		bm.set_identity()
+		print('FAIL')
 		assert False
-	except Exception:
+	except MatrixException:
 		pass
 	bm.set_identity(relaxed=True) # 2nd try
 	assert bm.rows == [128, 64, 32]
+
+	# test append
+	bm = BitMatrix(3, 8, [128,64,32])
+	bm.row_append(16)
+	bm.row_append(8)
+	bm.row_append(4)
+	bm.row_append(2)
+	bm.row_append(1)
+	assert bm.rows == [128, 64, 32, 16, 8, 4, 2, 1]
+	bm.row_append(255)
+	allowed = True
+	try:
+		bm.row_append(256)
+		print('FAIL')
+		assert False
+	except MatrixException:
+		pass
 
 	# test row echelon
 	# 1011    1000
@@ -205,7 +245,21 @@ if __name__ == '__main__':
 	assert echelon == BitMatrix(3,4, [11, 7, 0])
 	assert echelon.rank() == 2
 
-	# test row echelon
+	# test row echelon, with degenerate zero row
+	# 1001    1001
+	# 1011 -> 0010
+	# 0000    0000
+	# 0010    0000
+	bm = BitMatrix(4,4, [9,11,0,2])
+	echelon = bm.row_echelon()
+	assert echelon == BitMatrix(4,4, [9,2,0,0])
+	assert echelon.rank() == 2
+
+	# test TALL row echelon
+	# 1      1
+	# 0   -> 0
+	# 1      0
+	# ...    ...
 	bm = BitMatrix(1000,1)
 	bm.set_random()
 	echelon = bm.row_echelon()

@@ -40,42 +40,26 @@ def solve(inputs, target):
 	width = max([x.bit_length() for x in inputs])
 	if target.bit_length() > width:
 		return []
-	print('target: %s' % bitstr(target, width))
-	print('width: %d' % width)
 
 	selector = independent_subset(inputs)
 	chosen = list(compress(inputs, selector))
 	chosen_idxs = [x for x in range(len(selector)) if selector[x]]
-	print('chosen:', chosen)
-	print('chosen_idxs:', chosen_idxs)
 
-	A = BitMatrix(sum(selector), width, chosen)
-	print('A:')
-	print(A)
-	record = BitMatrix(sum(selector), width)
+	A = BitMatrix(len(chosen), width, chosen)
+	record = BitMatrix(len(chosen), len(chosen))
 	record.set_identity(relaxed=True)
-	print('record:')
-	print(record)
 
 	echelon = A.row_echelon(record)
-	print('echelon:')
-	print(echelon)
 
 	# calculate row2mask, eg:
 	# [0]: 0x8000 "use row 0 to toggle bit 15"
 	# [1]: 0x4000 "use row 1 to toggle bit 14"
 	# [2]: 0x0010 "use row 2 to toggle bit 4"
 	row2mask = [1<<(echelon.rows[x].bit_length()-1) for x in range(echelon.rank())]
-	print('\nrow2mask:', row2mask)
 
-	# rows_used_bitfield, eg:
-	# 00
 	rows_used_bitfield = 0
-	print('\nrow2mask:', row2mask)
 	for (row, mask) in enumerate(row2mask):
-		print('[%d]: %s' % (row, bitstr(mask,width)))
 		if target & mask:
-			print('since %s & %s, xoring in %s' % (bitstr(target,width), bitstr(mask,width), bitstr(record.rows[row],width)))
 			rows_used_bitfield ^= record.rows[row]
 
 	# 0101
@@ -84,7 +68,7 @@ def solve(inputs, target):
 	# |+--- row 2 used
 	# +---- row 3 NOT used
 	tmp = bitstr(rows_used_bitfield, record.nrows)
-	print('rows_used_bitfield:', tmp)
+	#print('rows_used_bitfield:', tmp)
 	selector = [int(x) for x in tmp]
 
 	# [0,1,0,1]
@@ -103,10 +87,8 @@ def solve(inputs, target):
 
 	# set result to [] if no solution
 	if target != reduce(lambda a,b:a^b, compress(inputs, selector), 0):
-		print('no solution')
 		return []
 
-	print('returning:', selector)
 	return selector
 
 if __name__ == '__main__':
@@ -128,7 +110,6 @@ if __name__ == '__main__':
 
 	# independent subset, many zeros
 	inputs = [0,0,0,0,1,0,1,0]
-	print(independent_subset(inputs))
 	assert independent_subset(inputs) == [0,0,0,0,1,0,0,0]
 
 	# independent subset
@@ -148,6 +129,23 @@ if __name__ == '__main__':
 
 		assert a == b
 
+	# solve a system
+	inputs = []
+	inputs.append(0b1010)
+	inputs.append(0b0011)
+	inputs.append(0b1101)
+	target = 0b1110
+	assert solve(inputs, target) == [0,1,1]
+
+	# solve same system with unnecessary input
+	inputs = []
+	inputs.append(0b1010)
+	inputs.append(0b0011)
+	inputs.append(0b1101)
+	inputs.append(0b0111)
+	target = 0b1110
+	assert solve(inputs, target) == [0,1,1,0]
+
 	# solve an 11-bit known system
 	inputs = []
 	inputs.append(0b11100111011)
@@ -157,15 +155,14 @@ if __name__ == '__main__':
 	inputs.append(0b01010110011)
 	inputs.append(0b01000101000)
 	inputs.append(0b10001001011)
-	#inputs.append(0b00011001010)
-	#inputs.append(0b11000100111)
-	#inputs.append(0b11000100001)
-	#inputs.append(0b10011010011)
-	#inputs.append(0b11010111010)
-	#inputs.append(0b10111000101)
+	inputs.append(0b00011001010)
+	inputs.append(0b11000100111)
+	inputs.append(0b11000100001)
+	inputs.append(0b10011010011)
+	inputs.append(0b11010111010)
+	inputs.append(0b10111000101)
 	target =      0b10011011010
-	print(bin(reduce(lambda a,b:a^b, inputs[0:7])))
-	assert solve(inputs, target) == [1,1,1,1,1,1,1,0,0,0,0,0,0]
+	assert solve(inputs, target) == [0,1,1,0,0,0,0,0,0,0,0,0,0]
 
 	# solve a 4-bit known system (worked on paper)
 	inputs = [0xA, 0x3, 0xD, 0xF]
@@ -176,7 +173,6 @@ if __name__ == '__main__':
 
 	# solve stupid cases
 	inputs = [1,0,1,0]
-	print(solve(inputs,1))
 	assert solve(inputs, 1) == [1,0,0,0]
 
 	# more zeros
@@ -215,8 +211,8 @@ if __name__ == '__main__':
 			assert target == reduce(lambda a,b:a^b, compress(inputs, selector), 0)
 
 	# solve problems without full inverses
-	for testi in range(100):
-		width = random.randint(1,20)
+	for testi in range(10000):
+		width = random.randint(1,32)
 		target = random.getrandbits(width)
 		inputs = [target]
 		# add the inputs that can produce the target
@@ -225,23 +221,16 @@ if __name__ == '__main__':
 			key = random.getrandbits(width)
 			inputs.append(plain ^ key)
 			inputs.append(key)
-			print('heehaw: ')
-			print(bitstr(inputs[0], width))
-			print(bitstr(inputs[1], width))
 		# add some random inputs (that may not necessarily help in producing the target)
 		for i in range(6):
 			inputs.append(random.getrandbits(width))
 		# mix it all up
-		#random.shuffle(inputs)
+		random.shuffle(inputs)
 
 		selector = solve(inputs, target)
+		check = reduce(lambda a,b:a^b, compress(inputs, selector), 0)
+		assert target == check
 
-		if selector == []:
-			print('%s (target)' % bitstr(target, width))
-			print('inputs:')
-			print('\n'.join(map(lambda x: bitstr(x, width), inputs)))
-			check = reduce(lambda a,b:a^b, inputs[0:7], 0)
-			print('%s (xor of first 6)' % bitstr(check, width))
-		assert target == reduce(lambda a,b:a^b, compress(inputs, selector), 0)
+	# TODO: construct and test systems WITHOUT solutions
 
 	print('PASS')

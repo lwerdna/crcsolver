@@ -64,16 +64,14 @@ class BitMatrix():
 			if not (value & (1<<(self.nrows-1-i))):
 				self.rows[i] ^= probe
 
-	def row_echelon(self):
-		''' calculate row echelon form while recording a history of operations
-			row echelon is identity -> history is inverse '''
+	def row_echelon(self, record=None):
+		''' calculate row echelon form
+			row echelon is identity -> record is inverse '''
 
 		self.check_consistency()
 
 		(nrows, ncols) = (self.nrows, self.ncols)
 		echelon = self.clone()
-		history = BitMatrix(nrows, self.ncols)
-		history.set_identity(relaxed=True)
 
 		# row reduce
 		for cur in range(min(nrows, ncols)):
@@ -92,55 +90,41 @@ class BitMatrix():
 				echelon.rows[cur] = echelon.rows[i]
 				echelon.rows[i] = tmp
 
-				tmp = history.rows[cur]
-				history.rows[cur] = history.rows[i]
-				history.rows[i] = tmp
+				if record:
+					tmp = record.rows[cur]
+					record.rows[cur] = record.rows[i]
+					record.rows[i] = tmp
 
 			# add to every other row
 			for i in range(0, nrows):
 				if i==cur: continue
 				if echelon.rows[i] & mask:
 					echelon.rows[i] ^= echelon.rows[cur]
-					history.rows[i] ^= history.rows[cur]
+					if record:
+						record.rows[i] ^= record.rows[cur]
 
-		return (echelon, history)
+		return echelon
 
-	def rank(self, relaxed=False):
-		''' dimension of the vector space spanned by rows '''
-		if relaxed:
-			echelon = self.clone()
-		else:
-			(echelon, history) = self.row_echelon()
-
-		rank = 0
-		bitpos = self.ncols-1
-		for rowi in range(echelon.nrows):
-			# find leftmost set bit
-			while bitpos >= 0:
-				mask = 1<<bitpos
-				if echelon.rows[rowi] & mask: break
-				bitpos -= 1
-
-			# print('rows[%d]=%s hit bit %d' % (rowi, bin(echelon.rows[rowi])[2:], bitpos))
-			if bitpos < 0: break
-
-			# if following row also has set bit, we're done
-			if rowi < echelon.nrows-1:
-				if echelon.rows[rowi+1] & mask:
-					break
-
-			rank += 1
-			bitpos -= 1
-			if bitpos < 0: break
-
-		return rank
+	def rank(self):
+		''' dimension of the vector space spanned by rows
+			assumes row echelon form '''
+		return len([x for x in self.rows if x]) # quantity of nonzero rows
 
 	def inverse(self):
-		(echelon, history) = self.clone().row_echelon()
-		rank = echelon.rank(relaxed=True)
+		self.check_consistency()
+
+		if self.nrows != self.ncols:
+			raise Exception('inversion impossible since rows != columns, %d != %d' % (self.nrows, self.ncols))
+
+		record = BitMatrix(self.nrows, self.ncols)
+		record.set_identity()
+
+		echelon = self.row_echelon(record)
+		rank = echelon.rank()
 		if rank != echelon.nrows:
 			raise Exception('inversion impossible, matrix rank %d != nrows %d' % (rank, echelon.nrows))
-		return history
+
+		return record
 
 	def transpose(self):
 		tra = BitMatrix(self.ncols, self.nrows)
@@ -181,31 +165,77 @@ class BitMatrix():
 		return '\n'.join(tmp)
 
 if __name__ == '__main__':
+	# test inverse
+	# 1000
+	# 0100
+	# 0010
+	# 0001
+	bm = BitMatrix(4, 4)
+	bm.set_identity()
+	assert bm.rows == [8, 4, 2, 1]
 
+	# test inverse, relaxed
+	# 10000000
+	# 01000000
+	# 00100000
+	bm = BitMatrix(3, 8) # 1st try
+	try:
+		bm.set_identity(relaxed=True)
+		assert False
+	except Exception:
+		pass
+	bm.set_identity(relaxed=True) # 2nd try
+	assert bm.rows == [128, 64, 32]
+
+	# test row echelon
+	# 1011    1000
+	# 1100 -> 0100
+	# 1111    0011
 	bm = BitMatrix(3,4, [0xB, 0xC, 0xF])
-	(echelon, history) = bm.row_echelon()
+	echelon = bm.row_echelon()
 	assert echelon == BitMatrix(3,4, [8, 4, 3])
-	assert echelon.rank(relaxed=True) == 3
+	assert echelon.rank() == 3
 
+	# test row echelon, with degenerate row
+	# 1011    1000
+	# 1100 -> 0100
+	# 0111    0000
 	bm = BitMatrix(3,4, [0xB, 0xC, 0x7])
-	(echelon, history) = bm.row_echelon()
+	echelon = bm.row_echelon()
 	assert echelon == BitMatrix(3,4, [11, 7, 0])
-	assert echelon.rank(relaxed=True) == 2
+	assert echelon.rank() == 2
 
-	for i in range(1000):
+	# test row echelon
+	bm = BitMatrix(1000,1)
+	bm.set_random()
+	echelon = bm.row_echelon()
+	assert echelon == BitMatrix(1000,1, [1]+999*[0])
+	assert echelon.rank() == 1
+
+	# test A^-1 * A = 1
+	for i in range(100):
 		dims = random.randint(1,64)
 
 		identity = BitMatrix(dims, dims)
 		identity.set_identity()
 
-		basis = BitMatrix(dims, dims)
-		basis.set_random_basis()
-		print('\nbasis:')
-		print(basis)
+		A = BitMatrix(dims, dims)
+		A.set_random_basis()
+		assert A.inverse() * A == identity
 
-		inverse = basis.inverse()
-		print('\ninverse:')
-		print(inverse)
-
-		assert inverse*basis == identity
-
+	# solve Ax = B by x = A^-1 * B
+#	for i in range(100):
+#		dims = random.randint(1,64)
+#
+#		A = BitMatrix(dims, dims)
+#		A.set_random_basis()
+#
+#		B = BitMatrix(dims, 1)
+#		B.set_random()
+#
+#		inverse = basis.inverse()
+#		print('\ninverse:')
+#		print(inverse)
+#
+#		assert inverse*basis == identity
+	print('PASS')

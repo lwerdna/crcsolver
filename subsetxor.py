@@ -45,13 +45,11 @@ def solve(inputs, target):
 	chosen = list(compress(inputs, selector))
 	chosen_idxs = [x for x in range(len(selector)) if selector[x]]
 
-	A = BitMatrix(len(chosen), width, chosen)
 	record = BitMatrix(len(chosen), len(chosen))
 	record.set_identity(relaxed=True)
+	echelon = BitMatrix(len(chosen), width, chosen).row_echelon(record)
 
-	echelon = A.row_echelon(record)
-
-	# calculate row2mask, eg:
+	# row2mask, eg:
 	# [0]: 0x8000 "use row 0 to toggle bit 15"
 	# [1]: 0x4000 "use row 1 to toggle bit 14"
 	# [2]: 0x0010 "use row 2 to toggle bit 4"
@@ -62,33 +60,25 @@ def solve(inputs, target):
 		if target & mask:
 			rows_used_bitfield ^= record.rows[row]
 
-	# 0101
-	# |||+- row 0 used
-	# ||+-- row 1 NOT used
-	# |+--- row 2 used
-	# +---- row 3 NOT used
-	tmp = bitstr(rows_used_bitfield, record.nrows)
-	#print('rows_used_bitfield:', tmp)
-	selector = [int(x) for x in tmp]
-
+	# selector, eg:
 	# [0,1,0,1]
-	#print('selector: ', selector)
-	# |||+- row 0 used
-	# ||+-- row 1 NOT used
-	# |+--- row 2 used
-	# +---- row 3 NOT used
+	#  | | | +- chosen[3] used
+	#  | | +--- chosen[2] NOT used
+	#  | +----- chosen[1] used
+	#  +------- chosen[0] NOT used
+	selector = [int(x) for x in bitstr(rows_used_bitfield, record.nrows)]
+	if target != reduce(lambda a,b:a^b, compress(chosen, selector), 0):
+		return []
 
-	# this selector is for the chosen, map these back to the inputs
+	# convert selector over chosen to selector over original inputs
 	tmp = [0]*len(inputs)
 	for (i, s) in enumerate(selector):
 		if not s: continue
 		tmp[chosen_idxs[i]] = 1
 	selector = tmp
+	assert target == reduce(lambda a,b:a^b, compress(inputs, selector), 0)
 
-	# set result to [] if no solution
-	if target != reduce(lambda a,b:a^b, compress(inputs, selector), 0):
-		return []
-
+	# done
 	return selector
 
 if __name__ == '__main__':
@@ -99,6 +89,10 @@ if __name__ == '__main__':
 	# independent subset, they're one dependent
 	inputs = [0xB, 0xC, 0x7]
 	assert independent_subset(inputs) == [1,1,0]
+
+	# independent subset, they're all dependent
+	inputs = [0xB, 0xB, 0xB, 0xB, 0xB, 0xB]
+	assert independent_subset(inputs) == [1,0,0,0,0,0]
 
 	# independent subset, two dependent, including a zero
 	inputs = [9, 11, 0, 2]
@@ -179,6 +173,11 @@ if __name__ == '__main__':
 	inputs = [0,0,0,0,1,0,1,0]
 	assert solve(inputs, 1) == [0,0,0,0,1,0,0,0]
 
+	# solve a naive system
+	assert solve([0xA, 0xA, 0xA, 0xA], 0xA) == [1,0,0,0]
+	assert solve([0xA, 0xB, 0xB, 0xB], 0xB) == [0,1,0,0]
+	assert solve([0xB, 0xB, 0xA, 0xA], 0xA) == [0,0,1,0]
+
 	# solve a 4-bit known system (worked on paper)
 	inputs = [0xA, 0x3, 0xD, 0xF]
 	assert solve(inputs, 0xA) == [1,0,0,0]
@@ -222,7 +221,7 @@ if __name__ == '__main__':
 			inputs.append(plain ^ key)
 			inputs.append(key)
 		# add some random inputs (that may not necessarily help in producing the target)
-		for i in range(6):
+		for i in range(20):
 			inputs.append(random.getrandbits(width))
 		# mix it all up
 		random.shuffle(inputs)

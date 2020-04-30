@@ -2,7 +2,7 @@
 
 import random
 
-from crccracker.bitmatrix import BitMatrix, MatrixException
+from crcsolver.bitmatrix import BitMatrix, MatrixException
 
 if __name__ == '__main__':
 	# test identity

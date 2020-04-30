@@ -4,8 +4,8 @@ import random
 from itertools import compress
 from functools import reduce
 
-from crccracker.bitmatrix import BitMatrix
-from crccracker.subsetxor import solve, independent_subset
+from crcsolver.bitmatrix import BitMatrix
+from crcsolver.subsetxor import solve, independent_subset
 
 if __name__ == '__main__':
 	# independent subset, they're all independent

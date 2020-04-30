@@ -1,4 +1,4 @@
-# crccracker
+# crcsolver
 
 solve for data, given a target crc
 
@@ -15,7 +15,7 @@ We'll target python's built-in crc32:
 Now suppose we lost the 'e', so we have b'p_nguin' and need to solve for it. With bits indexed left-to-right across the input, the missing character is at bits [8,9,10,11,12,13,14,15].
 
 ```
->>> from crccracker import solve
+>>> from crcsolver import solve
 >>> solve(b'p_nguin', [8,9,10,11,12,13,14,15], 3854672160, binascii.crc32)
 b'penguin'
 ```

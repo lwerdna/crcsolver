@@ -1,4 +1,4 @@
-name = "crccracker"
+name = "crcsolver"
 
 from . import main
 

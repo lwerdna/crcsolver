@@ -5,7 +5,7 @@ import random
 import binascii
 import functools
 
-from crccracker import solve
+from crcsolver import solve
 
 def bitstr_int(val, width):
 	return bin(val)[2:].rjust(width, '0')

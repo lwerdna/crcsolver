@@ -1,6 +1,6 @@
 # crcsolver
 
-solve for data, given a target crc
+solve for data, given a target cyclic redundancy check (CRC)
 
 # Use
 
@@ -20,7 +20,7 @@ Now suppose we lost the 'e', so we have b'p_nguin' and need to solve for it. Wit
 b'penguin'
 ```
 
-The solve takes what data is known, a list of bits that are unknown, a target crc result, and a crc calculating function which it will call while finding a solution.
+The solve takes what data is known, a list of bits that are unknown, a target CRC result, and a CRC calculating function which it will call while finding a solution.
 
 Any n-bit CRC is solvable with at least n bits of freedom, but might not have a solution with less. Here's a failed attempt to toggle the first 8 bits of b'XXXXXXXX' to the same CRC has b'penguin'. When there is no solution, solve() returns None:
 

@@ -93,4 +93,10 @@ if __name__ == '__main__':
 		print('crc_b(%s) = %s' % (recovered, bitstr_int(csum_recovered,16)))
 		assert csum_orig == csum_recovered
 
+	# solves that fail
+	for i in range(1,31):
+		assert solve(b'albatross', range(i), 3854672161, binascii.crc32) == None
+	# but then pass, given enough freedom
+	assert binascii.crc32(solve(b'albatross', range(32), 3854672161, binascii.crc32)) == 3854672161
+
 	print('PASS')

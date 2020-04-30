@@ -6,12 +6,6 @@ import functools
 
 from . import subsetxor
 
-def bitstr_int(val, width):
-	return bin(val)[2:].rjust(width, '0')
-
-def bitstr(data):
-	return ''.join([bitstr_int(val,8) for val in data])
-
 def solve(data, unknowns, desired, crcfunc):
 	zeroed = [0]*len(data)
 	csum_nulls = crcfunc(bytes(zeroed))
@@ -34,12 +28,13 @@ def solve(data, unknowns, desired, crcfunc):
 		csum = crcfunc(bytes(zeroed))
 		inputs.append(csum_nulls ^ csum)
 
-		#print('crc(%s) == %s' % (bytes(zeroed), bitstr_int(csum,16)))
 		# clear bit
 		zeroed[position//8] ^= bit
 
 	# solve subsetxor
 	selector = subsetxor.solve(inputs, target)
+	if selector == []:
+		return None
 
 	# set the results on the data, return it
 	result = emptied

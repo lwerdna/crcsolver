@@ -42,3 +42,5 @@ Note the solver doesn't know what data looks nice or not. It will find the first
 >>> binascii.crc32(b'\xe4\xaf\x96#XXXX')
 3854672160
 ```
+
+Other examples are available in the source distribution under ./tests.

@@ -7,7 +7,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="crcsolver",
-    version="1.0.0",
+    version="1.0.1",
     author="Andrew Lamoureux",
     author_email="foo@bar.com",
     description="solve for data, given a target crc",

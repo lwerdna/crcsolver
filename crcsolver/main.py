@@ -71,10 +71,13 @@ def bit_gen(data, msb_first):
 			b >>= 1
 
 def compute(data, crc_name):
-	entry = [e for e in crc_catalog.database if e['name']==crc_name]
-	if not entry:
-		raise Exception('unrecognized algorithm: %s' % crc_name)
-	entry = entry[0]
+	if type(crc_name) == str:
+		entry = [e for e in crc_catalog.database if e['name']==crc_name]
+		if not entry:
+			raise Exception('unrecognized algorithm: %s' % crc_name)
+		entry = entry[0]
+	else:
+		entry = crc_name
 
 	poly = entry['poly']
 	checksum = entry['init']

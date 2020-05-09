@@ -7,16 +7,21 @@ import functools
 from . import subsetxor
 from . import crc_catalog
 
-def solve(data, unknowns, desired, crcfunc):
+def solve(data, unknowns, desired, crc_func):
+	# crc_func can be a function or a name from the crc_catalog
+	if type(crc_func) == str:
+		crc_name = crc_func
+		crc_func = lambda x: compute(x, crc_name)
+
 	zeroed = [0]*len(data)
-	csum_nulls = crcfunc(bytes(zeroed))
+	csum_nulls = crc_func(bytes(zeroed))
 
 	# calculate subsetxor target
 	emptied = list(data)
 	for position in unknowns:
 		bit = 1<<(7-position%8)
 		emptied[position//8] &= ~bit
-	csum_emptied = crcfunc(bytes(emptied))
+	csum_emptied = crc_func(bytes(emptied))
 	target = csum_emptied ^ desired
 
 	# calculate subsetxor inputs
@@ -26,7 +31,7 @@ def solve(data, unknowns, desired, crcfunc):
 		# set bit
 		zeroed[position//8] |= bit
 
-		csum = crcfunc(bytes(zeroed))
+		csum = crc_func(bytes(zeroed))
 		inputs.append(csum_nulls ^ csum)
 
 		# clear bit
@@ -66,9 +71,10 @@ def bit_gen(data, msb_first):
 			b >>= 1
 
 def compute(data, crc_name):
-	entry = [e for e in crc_catalog.database if e['name']==crc_name][0]
+	entry = [e for e in crc_catalog.database if e['name']==crc_name]
 	if not entry:
 		raise Exception('unrecognized algorithm: %s' % crc_name)
+	entry = entry[0]
 
 	poly = entry['poly']
 	checksum = entry['init']

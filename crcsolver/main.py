@@ -56,6 +56,15 @@ def reflect(x, width):
 		x >>= 1
 	return y
 
+def bit_gen(data, msb_first):
+	for b in data:
+		if not msb_first:
+			b = reflect(b, 8)
+
+		for i in range(8):
+			yield b & 1
+			b >>= 1
+
 def compute(data, crc_name):
 	entry = [e for e in crc_catalog.database if e['name']==crc_name][0]
 	if not entry:
@@ -66,21 +75,19 @@ def compute(data, crc_name):
 	width = entry['width']
 	msb_mask = 1<<(width-1)
 
-	for b in data:
-		if entry['refin']:
-			b = reflect(b, 8)
+	bg = bit_gen(data, entry['refin'])
 
-		checksum = checksum ^ (b << (width-8))
+	for bit in bg:
+		checksum = checksum ^ (bit << (width-1))
 
-		for k in range(8):
-			if checksum & msb_mask:
-				checksum = ((checksum ^ msb_mask) << 1) ^ poly
-			else:
-				checksum = checksum << 1
+		if checksum & msb_mask:
+			checksum = ((checksum ^ msb_mask) << 1) ^ poly
+		else:
+			checksum = checksum << 1
 
 	checksum ^= entry['xorout']
 
 	if entry['refout']:
-		checksum = reflect(checksum, 64)
+		checksum = reflect(checksum, width)
 
 	return checksum

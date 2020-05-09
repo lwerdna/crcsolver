@@ -8,9 +8,6 @@ from crcsolver import compute
 from crcsolver.crc_catalog import database
 
 for entry in database:
-	if entry['width'] % 8:
-		continue
-
 	name = entry['name']
 	print('testing %s' % name)
 	actual = compute(b'123456789', name)

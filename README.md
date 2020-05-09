@@ -1,46 +1,65 @@
-# crcsolver
+### Example
 
-solve for data, given a target cyclic redundancy check (CRC)
+Supply the known data, unknown bits, target checksum, and crc function:
 
-# Use
-
-We'll target python's built-in crc32:
+![](./resources/monkey_binascii.png)
 
 ```
->>> import binascii
->>> binascii.crc32(b'penguin')
-3854672160
+>>> crcsolver.solve(b'MONK__', range(32,48), 0x401a68b6, binascii.crc32)
+b'MONKEY'
 ```
 
-Now suppose we lost the 'e'. We have b'p_nguin' and need to solve for that vowel. With bits indexed left-to-right across the input, the missing character is at bits [8,9,10,11,12,13,14,15].
+### Example
+
+![](./resources/monkey_binascii_2.png)
 
 ```
->>> from crcsolver import solve
->>> solve(b'p_nguin', [8,9,10,11,12,13,14,15], 3854672160, binascii.crc32)
-b'penguin'
+>>> crcsolver.solve(b'M_NK_Y', [8,9,10,11,12,13,14,15,16,32,33,34,35,36,37,38,39], 0x401a68b6, binascii.crc32)
+b'MONKEY'
 ```
 
-The solve takes what data is known, a list of bits that are unknown, a target CRC result, and a CRC calculating function which it will call while finding a solution.
+### Example
 
-Any n-bit CRC is solvable with at least n bits of freedom, but might not have a solution with less. Here's a failed attempt to toggle the first 8 bits of b'XXXXXXXX' to the same CRC has b'penguin'. When there is no solution, solve() returns None:
+You may supply an arbitrary CRC function or the **name** of a CRC algorithm:
 
-```
->>> solve(b'XXXXXXXX', range(8), 3854672160, binascii.crc32)
->>>
-```
-
-With 32 bits of freedom, a solution exists:
+![](./resources/monkey_crc32_iso_hdlc.png)
 
 ```
->>> solve(b'XXXXXXXX', range(32), 3854672160, binascii.crc32)
-b'\xe4\xaf\x96#XXXX'
+>>> crcsolver.solve(b'__NKEY', range(16), 0x401a68b6, 'CRC-32/ISO-HDLC')
+b'MONKEY'
 ```
 
-Note the solver doesn't know what data looks nice or not. It will find the first solution, which may not be human readable. Verify:
+The full list of available named CRC's is found in `crc_catalog.py`.
+
+### Example
+
+This package also can compute checksums:
 
 ```
->>> binascii.crc32(b'\xe4\xaf\x96#XXXX')
-3854672160
+>>> hex(crcsolver.compute(b'MONKEY', 'CRC-3/GSM'))
+'0x5'
+>>> hex(crcsolver.compute(b'MONKEY', 'CRC-32/ISO-HDLC'))
+'0x401a68b6'
+>>> hex(crcsolver.compute(b'MONKEY', 'CRC-32/MPEG-2'))
+'0xe643d817'
+>>> hex(crcsolver.compute(b'MONKEY', 'CRC-64/ECMA-182'))
+'0x2cf08634f65960ae'
+>>> hex(crcsolver.compute(b'MONKEY', 'CRC-82/DARC'))
+'0x240a7856c67f10a2c0f7f'
 ```
 
-Other examples are available in the source distribution under ./tests.
+The full list of available named CRC's is found in `crc_catalog.py`.
+
+### Example
+
+You may supply a dictionary of generalized CRC parameters to compute a CRC:
+
+```
+>>> hex(crcsolver.compute(b'MONKEY', {'width':32, 'poly':0x04c11db7, 'init':0xffffffff, 'refin':True, 'refout':True, 'xorout':0xffffffff}))
+'0x401a68b6'
+```
+
+### Prior Art
+
+* http://reveng.sourceforge.net CRC RevEng: arbitrary-precision CRC calculator and algorithm finder
+* https://github.com/resilar/crchack Reversing CRC for fun and profit
